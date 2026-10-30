@@ -42,12 +42,23 @@ a.nueva{font-size:.85rem;color:#7a5c3e}
 <p class="pie">Qué esperar: casos de santos que se parecen de verdad a tu situación (en qué se parecen y en qué no), citas del Magisterio con fuente comprobable y una síntesis con un paso concreto, como material para hablar con tu director espiritual y tu familia, nunca como sustituto. La respuesta tarda unos minutos. Es una herramienta en pruebas.</p>
 
 <script>
-const API = new URLSearchParams(location.search).get('api') || 'https://babel.mammoth-rudd.ts.net/santos';
+// La dirección del servidor cambia cuando se reinicia el túnel: se lee de endpoint.json (sin caché) y, si deja de
+// responder, se vuelve a leer y se reintenta una vez.
+const FIJA = new URLSearchParams(location.search).get('api');
+let API = FIJA;
+async function endpoint() {
+  if (FIJA) return FIJA;
+  const r = await fetch(`endpoint.json?t=${Date.now()}`, { cache: 'no-store' });
+  API = (await r.json()).api;
+  return API;
+}
 const $ = id => document.getElementById(id);
 let token = localStorage.getItem('santos_token'), vistos = new Set(), desde = '', espera = null;
 
 async function llamar(ruta, cuerpo) {
-  const r = await fetch(`${API}/${ruta}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo || {}) });
+  const pedir = async () => fetch(`${API || await endpoint()}/${ruta}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo || {}) });
+  let r;
+  try { r = await pedir(); } catch { API = null; await endpoint(); r = await pedir(); }
   const j = await r.json().catch(() => ({ ok: false, error: 'Sin respuesta del servidor.' }));
   if (r.status === 401) { localStorage.removeItem('santos_token'); token = null; }
   if (!r.ok || !j.ok) throw new Error(j.error || 'No se ha podido.');
