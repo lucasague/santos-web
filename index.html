@@ -6,29 +6,108 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Santos: paralelos para discernir</title>
 <style>
-body{font-family:Georgia,serif;max-width:38rem;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#2b2420;background:#faf6ef}
-h1{font-size:1.7rem}code{background:#eee3d0;padding:.1em .35em;border-radius:3px}
-.aviso{font-size:.9rem;color:#6b5d50;border-top:1px solid #d8cbb5;margin-top:2rem;padding-top:1rem}
+body{font-family:Georgia,serif;max-width:40rem;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#2b2420;background:#faf6ef}
+h1{font-size:1.7rem;margin-bottom:.3rem}
+.aviso{background:#f3e9d6;border:1px solid #d8cbb5;border-radius:6px;padding:.8rem 1rem;font-size:.95rem}
+.aviso label{display:flex;gap:.5rem;align-items:flex-start;margin-top:.5rem;font-weight:bold}
+#chat{border:1px solid #d8cbb5;border-radius:6px;background:#fffdf8;min-height:12rem;max-height:60vh;overflow-y:auto;padding:.8rem;margin:1rem 0}
+.m{margin:.4rem 0;padding:.5rem .8rem;border-radius:8px;white-space:pre-wrap;max-width:88%}
+.tu{background:#e6dcc8;margin-left:auto}
+.santos{background:#efe7f5}
+.estado{font-size:.85rem;color:#6b5d50;font-style:italic}
+form{display:flex;gap:.5rem}
+textarea{flex:1;font:inherit;padding:.5rem;border:1px solid #c9b99d;border-radius:6px;min-height:4rem;resize:vertical}
+button{font:inherit;padding:.4rem 1rem;border:0;border-radius:6px;background:#7a5c3e;color:#fff;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+.pie{font-size:.85rem;color:#6b5d50;margin-top:1.5rem}
+a.nueva{font-size:.85rem;color:#7a5c3e}
 </style>
 </head>
 <body>
 <h1>Santos: paralelos para discernir</h1>
-<p>Cuéntale a Luca un momento de tu vida o una decisión que tengas que tomar, y te devuelve paralelos con las vidas de los santos y lo que dice el Magisterio, al estilo del padre Kentenich: comparar tu situación con la de un santo para ver qué actitud tomar.</p>
-<h2>Cómo se usa</h2>
-<p>Abre una <a href="https://github.com/lucasague/santos-web/issues/new?template=consulta.md">consulta nueva</a> en este repositorio y cuenta tu situación. Luca la atiende y publica una respuesta individual debajo. Ojo: tanto la consulta como la respuesta son públicas.</p>
-<p>También por WhatsApp:</p>
-<ol>
-<li>Escribe por WhatsApp a Luca un mensaje que <strong>empiece</strong> por <code>#SANTOS</code> y cuenta tu situación.</li>
-<li>O manda solo <code>#SANTOS</code> y, justo después, una nota de voz.</li>
-<li>Si falta algo clave, te hará como máximo dos preguntas. Respóndelas en el mismo chat.</li>
-</ol>
-<p>Cada persona puede hacer unas pocas consultas nuevas al día.</p>
-<h2>Qué esperar</h2>
-<ul>
-<li>Casos de santos que se parecen de verdad a tu situación, diciendo en qué se parecen y en qué no.</li>
-<li>Citas del Magisterio con fuente comprobable.</li>
-<li>Una síntesis con un paso concreto, como material para hablar con tu director espiritual y tu familia, nunca como sustituto.</li>
-</ul>
-<p class="aviso">Las preguntas y respuestas pueden ser revisadas con fines de mejora de la IA. Es una herramienta en pruebas, solo para amigos de Lucas.</p>
+<p>Cuenta un momento de tu vida o una decisión que tengas que tomar, y recibirás paralelos con las vidas de los santos y lo que dice el Magisterio, al estilo del padre Kentenich: comparar tu situación con la de un santo para ver qué actitud tomar. Si falta algo clave, se te harán como mucho dos preguntas.</p>
+
+<div class="aviso">
+<strong>No pongas nada personal</strong> (nombres, datos identificables, situaciones íntimas): las preguntas y respuestas pueden ser revisadas con fines de mejora de la IA. Cuenta tu situación en general.
+<label><input type="checkbox" id="acepto"> Lo entiendo y no voy a poner nada personal.</label>
+</div>
+
+<div id="chat" aria-live="polite"><p class="estado" id="vacio">Tu conversación es privada: solo la ves tú, en este navegador.</p></div>
+<form id="f">
+<textarea id="texto" maxlength="3000" placeholder="Cuenta tu situación…" disabled></textarea>
+<button id="enviar" disabled>Enviar</button>
+</form>
+<p><a href="#" class="nueva" id="nueva">Empezar una conversación nueva</a></p>
+
+<p class="pie">Qué esperar: casos de santos que se parecen de verdad a tu situación (en qué se parecen y en qué no), citas del Magisterio con fuente comprobable y una síntesis con un paso concreto, como material para hablar con tu director espiritual y tu familia, nunca como sustituto. La respuesta tarda unos minutos. Es una herramienta en pruebas.</p>
+
+<script>
+const API = new URLSearchParams(location.search).get('api') || 'https://babel.mammoth-rudd.ts.net/santos';
+const $ = id => document.getElementById(id);
+let token = localStorage.getItem('santos_token'), vistos = new Set(), desde = '', espera = null;
+
+async function llamar(ruta, cuerpo) {
+  const r = await fetch(`${API}/${ruta}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo || {}) });
+  const j = await r.json().catch(() => ({ ok: false, error: 'Sin respuesta del servidor.' }));
+  if (r.status === 401) { localStorage.removeItem('santos_token'); token = null; }
+  if (!r.ok || !j.ok) throw new Error(j.error || 'No se ha podido.');
+  return j;
+}
+async function sesion() {
+  if (!token) { token = (await llamar('sesion')).token; localStorage.setItem('santos_token', token); }
+  return token;
+}
+function pintar(m) {
+  if (vistos.has(m.id)) return;
+  vistos.add(m.id);
+  $('vacio')?.remove();
+  const d = document.createElement('div');
+  d.className = 'm ' + (m.de === 'tu' ? 'tu' : 'santos');
+  d.textContent = m.texto.replace(/(^|\s)_([^_\n]+)_(?=\s|$)/g, '$1$2').replace(/\*([^*\n]+)\*/g, '$1');
+  $('chat').insertBefore(d, $('pensando'));
+  $('chat').scrollTop = $('chat').scrollHeight;
+}
+function pensando(si) {
+  let p = $('pensando');
+  if (si && !p) { p = document.createElement('p'); p.id = 'pensando'; p.className = 'estado'; p.textContent = 'Leyendo y buscando paralelos… (puede tardar unos minutos; puedes dejar la página abierta)'; $('chat').appendChild(p); }
+  if (!si && p) p.remove();
+}
+async function refrescar() {
+  if (!token) return;
+  try {
+    const j = await llamar('mensajes', { token, desde });
+    for (const m of j.mensajes) { pintar(m); desde = m.ts; }
+    pensando(j.esperando);
+  } catch (e) { if (!token) { vistos.clear(); desde = ''; } }
+}
+function activar() {
+  const ok = $('acepto').checked;
+  localStorage.setItem('santos_acepto', ok ? '1' : '');
+  $('texto').disabled = !ok; $('enviar').disabled = !ok;
+}
+$('acepto').checked = !!localStorage.getItem('santos_acepto');
+$('acepto').addEventListener('change', activar);
+activar();
+$('f').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const texto = $('texto').value.trim();
+  if (!texto || !$('acepto').checked) return;
+  $('enviar').disabled = true;
+  try {
+    await sesion();
+    await llamar('mensaje', { token, texto, acepto: true });
+    $('texto').value = '';
+    await refrescar();
+  } catch (e) { alert(e.message); }
+  $('enviar').disabled = !$('acepto').checked;
+});
+$('nueva').addEventListener('click', ev => {
+  ev.preventDefault();
+  if (!confirm('Se empieza una conversación nueva y la de ahora deja de verse en este navegador. Seguir?')) return;
+  localStorage.removeItem('santos_token'); location.reload();
+});
+refrescar();
+setInterval(refrescar, 5000);
+</script>
 </body>
 </html>
